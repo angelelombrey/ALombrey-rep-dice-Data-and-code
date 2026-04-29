@@ -103,7 +103,7 @@ dat.ind.bhv.Multi2 <- data.frame(datMultiRep %>% group_by(Subject,SignalCombinat
 ________________________________________________________________________________________________________________________________________________________________________________________________
 
 
-# Taux de similarit? entre les r?pertoires individuels (Captive-Captive/Sanctuary-Sanctuary, Captive-Sanctuary): 
+# Individual repertoire similarity (Captive-Captive/Sanctuary-Sanctuary, Captive-Sanctuary): 
 
 # Step 1 : calculate DiceMulti coefficient based on formula: dc = (2 x number of behaviours two inds have in common)/(R of ind1 + R ind2) ---
 ## create data frame in which every combination of individual and behaviour is counted
