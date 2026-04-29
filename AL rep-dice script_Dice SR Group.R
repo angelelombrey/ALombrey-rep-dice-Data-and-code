@@ -71,7 +71,7 @@ dat.ind.bhv2 <- data.frame(Data %>% group_by(Subject,Behavior) %>% dplyr::summar
 ________________________________________________________________________________________________________________________________________________________________________________________________
 
 
-# Taux de similarit? entre les r?pertoires individuels (A-A/B-B, A-B): 
+# Individual repertoire similarity (A-A/B-B, A-B): 
 
 # Step 1 : calculate Dice coefficient based on formula: dc = (2 x number of behaviours two inds have in common)/(R of ind1 + R ind2) ---
 ## create data frame in which every combination of individual and behaviour is counted
