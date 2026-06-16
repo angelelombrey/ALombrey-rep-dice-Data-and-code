@@ -1,6 +1,5 @@
-5. SETTING MULTICOMPONENT REPERTOIRE SIMILARITY 
+## 5. SETTING MULTICOMPONENT REPERTOIRE SIMILARITY ##
 
-_______________________________________________________________________________________________________________________________________________________________________________________________
 # PACKAGES
 library(lme4);library(tidyverse); library(dplyr);library(writexl);library(ggpubr)
 library(plyr);library(tidyr);library(car);library(RColorBrewer);library(ggplot2)
@@ -29,6 +28,9 @@ theme_angele_ss <- theme(panel.background = element_blank(),
                          title = element_text(size = 25, family="sans"),
                          strip.text = element_text(size = 15))
 # PREPARE DATA
+path <- "D:\\Documents\\CoAuthoredManuscripts\\2026__Lombrey__Chimpanzee_Plasticity\\DataAnalysis\\"
+library(openxlsx)
+Data <- read.xlsx(xlsxFile=paste0(path,"Data.xlsx"), sheet=1, colNames=TRUE)
 
 Data$SexRec <- str_sub(Data$SexCombinaison, start = 2)
 Data <- Data %>% unite("SexSetting", c(Sex,Setting), sep = "/", remove = FALSE)
@@ -87,333 +89,410 @@ datMultiRep <- datMultiRep[datMultiRep$Multimodality_YN != "0", ]; datMultiRep <
 datMultiRep <- datMultiRep[!is.na(datMultiRep$SignalCombination), ]
 
 # Omit all levels of Subject that contributed fewer than 5 cases --- 118 --> 19 individuals (16F, 3M, 0W)
-nb.signals.per.ind <- data.frame(datMultiRep %>% group_by(Subject) %>% dplyr::summarize(count=n())) ; colnames(nb.signals.per.ind) <- c("Subject","TotComActs") 
+nb.signals.per.ind <- data.frame(
+  datMultiRep %>%
+    group_by(Subject) %>%
+    dplyr::summarize(count = n(), .groups = "drop")
+)
+colnames(nb.signals.per.ind) <- c("Subject", "NsignalsTot")
 nb.signals.per.ind$Subject <- as.character(nb.signals.per.ind$Subject)
-nb.signals.per.ind <- subset(nb.signals.per.ind, nb.signals.per.ind$TotComActs>4) # Keeps only the values in "column" that appear more than 4 times (N > 4)
+
+nb.signals.per.ind <- subset(nb.signals.per.ind, NsignalsTot > 4)
 datMultiRep <- subset(datMultiRep, Subject %in% nb.signals.per.ind$Subject)
 
-
-# Multi Sampling effort
-MultiSamplingEffort <- data.frame(datMultiRep %>% group_by(Subject) %>% dplyr::summarize(count=n())) ; colnames(MultiSamplingEffort) <- c("Subject","TotMultiSignals") 
-datMultiRep <- merge(MultiSamplingEffort, datMultiRep, by=c("Subject"))
-
-IndMultiRepSize <- aggregate(data=datMultiRep, SignalCombination ~ Subject, function(x) length(unique(x))) ; colnames(IndMultiRepSize) <- c("Subject","MultiRepSize")
-dat.ind.bhv.Multi2 <- data.frame(datMultiRep %>% group_by(Subject,SignalCombination) %>% dplyr::summarize(count=n())) ; colnames(dat.ind.bhv.Multi2) <- c("Subject","SignalCombination","NsignalsPbehavior") 
-
-________________________________________________________________________________________________________________________________________________________________________________________________
-
-
-# Individual repertoire similarity (Captive-Captive/Sanctuary-Sanctuary, Captive-Sanctuary): 
-
-# Step 1 : calculate DiceMulti coefficient based on formula: dc = (2 x number of behaviours two inds have in common)/(R of ind1 + R ind2) ---
-## create data frame in which every combination of individual and behaviour is counted
-dat.ind.bhv.Multi <- data.frame(table(datMultiRep$Subject,datMultiRep$SignalCombination)) ; colnames(dat.ind.bhv.Multi) <- c("Subject","SignalCombination","Nsignals")
-## create data frame with Subject as rows and columns
-dat.ind.ind.Multi <- data.frame(matrix(rep(NA, nrow(IndMultiRepSize) * nrow(IndMultiRepSize)), ncol=nrow(IndMultiRepSize)))
-colnames(dat.ind.ind.Multi) <- IndMultiRepSize$Subject
-rownames(dat.ind.ind.Multi) <- IndMultiRepSize$Subject
-## loop over all pairs of individuals
-for(i in 1:(nrow(IndMultiRepSize))) {
-  for(j in 1:(nrow(IndMultiRepSize))) {
-    Ind1 <- subset(dat.ind.bhv.Multi2, Subject==IndMultiRepSize$Subject[i])
-    Ind2 <- subset(dat.ind.bhv.Multi2, Subject==IndMultiRepSize$Subject[j])
-    ovrlp <- length(which(Ind1$SignalCombination %in% Ind2$SignalCombination)) # number of behaviors 2 individuals have in common
-    RInd1 <- subset(IndMultiRepSize, Subject==IndMultiRepSize$Subject[i])$MultiRepSize	# which is the same as nrow(Ind1)
-    RInd2 <- subset(IndMultiRepSize, Subject==IndMultiRepSize$Subject[j])$MultiRepSize	# which is the same as nrow(Ind2)
-    dat.ind.ind.Multi[which(rownames(dat.ind.ind.Multi)==IndMultiRepSize$Subject[i]),which(colnames(dat.ind.ind.Multi)==IndMultiRepSize$Subject[j])] <- (2 * ovrlp) / (RInd1 + RInd2)
-  }
-}
-## set diagonal to NA
-DiceMulti <- as.matrix(dat.ind.ind.Multi)
-diag(DiceMulti) <- NA
-#DiceMulti <- as.data.frame(DiceMulti)
-
-# step 2: define within- and between-setting dyads 
-## create data frame with Subject as rows and columns
-SETdat.wth.btw.Multi <- data.frame(matrix(rep(NA, nrow(IndMultiRepSize) * nrow(IndMultiRepSize)), ncol=nrow(IndMultiRepSize)))
-colnames(SETdat.wth.btw.Multi) <- IndMultiRepSize$Subject
-rownames(SETdat.wth.btw.Multi) <- IndMultiRepSize$Subject
-## loop over all pairs of individuals
-for(i in 1:(nrow(IndMultiRepSize))) {
-  for(j in 1:(nrow(IndMultiRepSize))) {
-    Ind1 <- subset(datMultiRep, Subject==IndMultiRepSize$Subject[i])
-    Ind2 <- subset(datMultiRep, Subject==IndMultiRepSize$Subject[j])
-    if(length(table(Ind1$Setting))>1) { print("Ohoh, better check my data again!") }
-    if(length(table(Ind2$Setting))>1) { print("Ohoh, better check my data again!") }
-    if(Ind1$Setting[1]==Ind2$Setting[1]) { SETwth.btw.Multi <- "Within" } else { SETwth.btw.Multi <- "Between" }
-    SETdat.wth.btw.Multi[which(rownames(SETdat.wth.btw.Multi)==IndMultiRepSize$Subject[i]),which(colnames(SETdat.wth.btw.Multi)==IndMultiRepSize$Subject[j])] <- SETwth.btw.Multi
-  }
-}
-## set diagonal to NA
-SETwth.btw.Multi <- as.matrix(SETdat.wth.btw.Multi)
-diag(SETwth.btw.Multi) <- NA
-#SETwth.btw.Multi <- as.data.frame(SETwth.btw.Multi)
-
-# step 3: select within and between setting dyads from the DiceMulti data frame (N=19)
-DiceMulti.WithinSET <- ifelse(SETwth.btw.Multi=="Within",DiceMulti,NA)
-DiceMulti.BetweenSET <- ifelse(SETwth.btw.Multi=="Between",DiceMulti,NA)
-
-(Emp.MDiceMultiWithinSET <- mean(DiceMulti.WithinSET[lower.tri(DiceMulti.WithinSET, diag = FALSE)],na.rm=TRUE)) # mean DiceMulti coefficient for within-dyCMultids (= mean repertoire overlap between individuals in the same setting (within, A-A and B-B))
-# Mean DiceMulti within settings (settings C, S et W confondus) = 0.07943728
-(Emp.MDiceMultiBetweenSET <- mean(DiceMulti.BetweenSET[lower.tri(DiceMulti.BetweenSET, diag = FALSE)],na.rm=TRUE)) # mean DiceMulti coefficient for between-dyCMultids (= mean repertoire overlap between individuals in different setting (between, A-B))
-# Mean DiceMulti between (C-S) settings = 0.04682856
-
-
-# Repertoire similarity between groups Within et Between
-
-# step 4: Combine all info in 1 table (1 line = 1 dyad --> create data frame dd with columns Ind1, Ind2, Dice, Within/Between)
-## Tranform Within matrix in table
-yWithinSETMulti <- expand.grid(rownames(DiceMulti.WithinSET), colnames(DiceMulti.WithinSET)) 
-labsWithin <- yWithinSETMulti[as.vector(upper.tri(DiceMulti.WithinSET, diag = FALSE)), ] 
-yWithinSETMulti <- cbind(labsWithin, DiceMulti.WithinSET[upper.tri(DiceMulti.WithinSET,diag=FALSE)]) 
-colnames(yWithinSETMulti) <- c("Ind1","Ind2","DiceMulti")
-yWithinSETMulti <- yWithinSETMulti[!is.na(yWithinSETMulti$DiceMulti), ] 
-yWithinSETMulti$WithinBetween <- rep("WithinS",nrow(yWithinSETMulti)) 
-mean(yWithinSETMulti$Dice)
-
-## Tranform Between matrix in table
-yBetweenSETMulti <- expand.grid(rownames(DiceMulti.BetweenSET), colnames(DiceMulti.BetweenSET))
-labsBetween <- yBetweenSETMulti[as.vector(upper.tri(DiceMulti.BetweenSET, diag = FALSE)), ]
-yBetweenSETMulti <- cbind(labsBetween, DiceMulti.BetweenSET[upper.tri(DiceMulti.BetweenSET,diag=FALSE)])
-colnames(yBetweenSETMulti) <- c("Ind1","Ind2","DiceMulti")
-yBetweenSETMulti <- yBetweenSETMulti[!is.na(yBetweenSETMulti$DiceMulti), ]
-yBetweenSETMulti$WithinBetween <- rep("BetweenS",nrow(yBetweenSETMulti))
-mean(yBetweenSETMulti$Dice)
-
-##Combine Within and Between tables
-WBddMultiSET <- rbind(yWithinSETMulti,yBetweenSETMulti)
-
-datMultiRep.sub <- datMultiRep[,c("Subject","Setting")] 
-datMultiRep.sub <- datMultiRep.sub[!duplicated(datMultiRep.sub), ] 
-WBddMultiSET <- merge(WBddMultiSET, datMultiRep.sub, by.x="Ind1", by.y="Subject", sort=FALSE, all.y=FALSE) 
-WBddMultiSET <- merge(WBddMultiSET, datMultiRep.sub, by.x="Ind2", by.y="Subject", sort=FALSE) 
-colnames(WBddMultiSET)[which(colnames(WBddMultiSET)=="Setting.x")] <- "Setting.ind1"
-colnames(WBddMultiSET)[which(colnames(WBddMultiSET)=="Setting.y")] <- "Setting.ind2"
-# Order columns
-WBddMultiSET<-WBddMultiSET[,c("Ind1","Ind2","DiceMulti","WithinBetween","Setting.ind1","Setting.ind2")]
-
-# step 5: matrix permutation test ---
-nPerm <- 1000
-dat.Perm.MultiSET <- c()
-for(k in 1:nPerm) {
-  ## permute Setting in datMultiRep
-  ind.Setting.perm.Multi <- datMultiRep.sub
-  ind.Setting.perm.Multi$Setting <- sample(ind.Setting.perm.Multi$Setting, nrow(ind.Setting.perm.Multi), replace=FALSE)
-  datMultiRep.inc.perm.MultiSET <- datMultiRep[,-which(colnames(datMultiRep)=="Setting")] 
-  datMultiRep.inc.perm.MultiSET <- merge(datMultiRep.inc.perm.MultiSET, ind.Setting.perm.Multi, by.x="Subject", by.y="Subject", sort=FALSE)
-  ## repeat step 2 & 3
-  ## create data frame with animal_id as rows and columns (step2)
-  SETdat.wth.btw.Multi <- data.frame(matrix(rep(NA, nrow(IndMultiRepSize) * nrow(IndMultiRepSize)), ncol=nrow(IndMultiRepSize)))
-  colnames(SETdat.wth.btw.Multi) <- IndMultiRepSize$Subject
-  rownames(SETdat.wth.btw.Multi) <- IndMultiRepSize$Subject
-  ## loop over all pairs of individuals (step2)
-  for(i in 1:(nrow(IndMultiRepSize))) {
-    for(j in 1:(nrow(IndMultiRepSize))) {
-      Ind1 <- subset(datMultiRep.inc.perm.MultiSET, Subject==IndMultiRepSize$Subject[i])
-      Ind2 <- subset(datMultiRep.inc.perm.MultiSET, Subject==IndMultiRepSize$Subject[j])
-      if(length(table(Ind1$Setting))>1) { print("Ohoh, better check my data again!") }
-      if(length(table(Ind2$Setting))>1) { print("Ohoh, better check my data again!") }
-      if(Ind1$Setting[1]==Ind2$Setting[1]) { SETwth.btw.Multi <- "Within" } else { SETwth.btw.Multi <- "Between" }
-      SETdat.wth.btw.Multi[which(rownames(SETdat.wth.btw.Multi)==IndMultiRepSize$Subject[i]),which(colnames(SETdat.wth.btw.Multi)==IndMultiRepSize$Subject[j])] <- SETwth.btw.Multi
-    }
-  }
-  ## set diagonal to NA (step3)
-  SETwth.btw.Multi <- as.matrix(SETdat.wth.btw.Multi)
-  diag(SETwth.btw.Multi) <- NA
-  DiceMulti.WithinSET <- ifelse(SETwth.btw.Multi=="Within",DiceMulti,NA)
-  DiceMulti.BetweenSET <- ifelse(SETwth.btw.Multi=="Between",DiceMulti,NA)
-  MDiceMultiWithin <- mean(DiceMulti.WithinSET[lower.tri(DiceMulti.WithinSET, diag = FALSE)],na.rm=TRUE)
-  MDiceMultiBetween <- mean(DiceMulti.BetweenSET[lower.tri(DiceMulti.BetweenSET, diag = FALSE)],na.rm=TRUE)
-  dat.Perm.MultiSET[k] <- MDiceMultiWithin - MDiceMultiBetween
-  flush.console()
-  if(k %% 10 == 0) { print(paste0("Finished ", k, " out of ", nPerm, " simulations")) } 
-}
-hist(dat.Perm.MultiSET)
-abline(v=Emp.MDiceMultiWithinSET - Emp.MDiceMultiBetweenSET, col="red") 
-pMRS <- (sum(abs(dat.Perm) >= abs(Emp.MDiceMultiWithin - Emp.MDiceMultiBetween)) + 1) / (nPerm + 1)
-# P-value = 0.000999
-
-
-# Significance thresholds are P>=0.975 and P<=0.025. 
-# This is because we are looking at the deviation from 0, which can either be negative or positive.
-# Because the distribution of differences is not necessarily symmetric around zero, we cannot calculate P-values using absolute values.
-
-
-# Repertoire similarity within setting captive (C-C), within setting sanctuary (S-S) & within setting wild (W-W)
-
-# step 2b: define within and between setting diads --- for C and S settings 
-## create data frame with animal_id as rows and columns
-SETdat.wth.btw.Multi2 <- data.frame(matrix(rep(NA, nrow(IndMultiRepSize) * nrow(IndMultiRepSize)), ncol=nrow(IndMultiRepSize)))
-colnames(SETdat.wth.btw.Multi2) <- IndMultiRepSize$Subject
-rownames(SETdat.wth.btw.Multi2) <- IndMultiRepSize$Subject
-## loop over all pairs of individuals
-for(i in 1:(nrow(IndMultiRepSize))) {
-  for(j in 1:(nrow(IndMultiRepSize))) {
-    SETwth.btw.Multi2 <- NA
-    Ind1 <- subset(datMultiRep, Subject==IndMultiRepSize$Subject[i])
-    Ind2 <- subset(datMultiRep, Subject==IndMultiRepSize$Subject[j])
-    if(length(table(Ind1$Setting))>1) { print("Ohoh, better check my data again!") }
-    if(length(table(Ind2$Setting))>1) { print("Ohoh, better check my data again!") }
-    if(Ind1$Setting[1]=="Captive" & Ind2$Setting[1]=="Captive") { SETwth.btw.Multi2 <- "Captive" }
-    if(Ind1$Setting[1]=="Sanctuary" & Ind2$Setting[1]=="Sanctuary") { SETwth.btw.Multi2 <- "Sanctuary" }
-    if(Ind1$Setting[1]=="Wild" & Ind2$Setting[1]=="Wild") { SETwth.btw.Multi2 <- "Wild" }
-    SETdat.wth.btw.Multi2[which(rownames(SETdat.wth.btw.Multi2)==IndMultiRepSize$Subject[i]),which(colnames(SETdat.wth.btw.Multi2)==IndMultiRepSize$Subject[j])] <- SETwth.btw.Multi2
-  }
-}
-## set diagonal to NA
-SETwth.btw.Multi2 <- as.matrix(SETdat.wth.btw.Multi2)
-diag(SETwth.btw.Multi2) <- NA
-#SETwth.btw.Multi2 <- as.data.frame(SETwth.btw.Multi2)
-
-# step 3b: select within and between group diads from the DiceMulti data frame ---
-DiceMulti.C <- ifelse(SETwth.btw.Multi2=="Captive",DiceMulti,NA)
-DiceMulti.S <- ifelse(SETwth.btw.Multi2=="Sanctuary",DiceMulti,NA)
-DiceMulti.W <- ifelse(SETwth.btw.Multi2=="Wild",DiceMulti,NA)
-
-(Emp.MDiceMultiC <- mean(DiceMulti.C[lower.tri(DiceMulti.C, diag = FALSE)],na.rm=TRUE))
-# Mean DiceMulti within Captive = 0.06299803 --> big individual variation (0 =  no overlap ; 1 = 100% overlap)
-(Emp.MDiceMultiS <- mean(DiceMulti.S[lower.tri(DiceMulti.S, diag = FALSE)],na.rm=TRUE))
-# Mean DiceMulti within Sanctuary = 0.08585487
-(Emp.MDiceMultiW <- mean(DiceMulti.W[lower.tri(DiceMulti.W, diag = FALSE)],na.rm=TRUE))
-# Mean DiceMulti within Wild = 0.1055461
-
-## step 4b
-## Tranform C matrix in table
-yCMulti <- expand.grid(rownames(DiceMulti.C), colnames(DiceMulti.C)) 
-labsC <- yCMulti[as.vector(upper.tri(DiceMulti.C, diag = FALSE)), ] 
-yCMulti <- cbind(labsC, DiceMulti.C[upper.tri(DiceMulti.C,diag=FALSE)]) 
-colnames(yCMulti) <- c("Ind1","Ind2","DiceMulti")
-yCMulti <- yCMulti[!is.na(yCMulti$DiceMulti), ] 
-yCMulti$SET <- rep("Captive",nrow(yCMulti))
-mean(yCMulti$Dice)
-
-## Tranform S matrix in table
-ySMulti <- expand.grid(rownames(DiceMulti.S), colnames(DiceMulti.S))
-labsS <- ySMulti[as.vector(upper.tri(DiceMulti.S, diag = FALSE)), ]
-ySMulti <- cbind(labsS, DiceMulti.S[upper.tri(DiceMulti.S,diag=FALSE)])
-colnames(ySMulti) <- c("Ind1","Ind2","DiceMulti")
-ySMulti <- ySMulti[!is.na(ySMulti$DiceMulti), ]
-ySMulti$SET <- rep("Sanctuary",nrow(ySMulti))
-mean(ySMulti$Dice)
-
-## Tranform W matrix in table
-yWMulti <- expand.grid(rownames(DiceMulti.W), colnames(DiceMulti.W))
-labsW <- yWMulti[as.vector(upper.tri(DiceMulti.W, diag = FALSE)), ]
-yWMulti <- cbind(labsW, DiceMulti.W[upper.tri(DiceMulti.W,diag=FALSE)])
-colnames(yWMulti) <- c("Ind1","Ind2","DiceMulti")
-yWMulti <- yWMulti[!is.na(yWMulti$DiceMulti), ]
-yWMulti$SET <- rep("Wild",nrow(yWMulti))
-mean(yWMulti$Dice)
-
-## Combine C, S and W tables
-SETddMulti <- rbind(yCMulti,ySMulti,yWMulti)
-
-datMultiRep.sub <- datMultiRep[,c("Subject","Setting")] 
-datMultiRep.sub <- datMultiRep.sub[!duplicated(datMultiRep.sub), ] 
-SETddMulti <- merge(SETddMulti, datMultiRep.sub, by.x="Ind1", by.y="Subject", sort=FALSE, all.y=FALSE) 
-SETddMulti <- merge(SETddMulti, datMultiRep.sub, by.x="Ind2", by.y="Subject", sort=FALSE) 
-colnames(SETddMulti)[which(colnames(SETddMulti)=="Setting.x")] <- "Setting.ind1"
-colnames(SETddMulti)[which(colnames(SETddMulti)=="Setting.y")] <- "Setting.ind2"
-# Order columns
-SETddMulti<-SETddMulti[,c("Ind1","Ind2","DiceMulti","SET","Setting.ind1","Setting.ind2")]
-
-mu.empMRS <- c(Emp.MDiceMultiC, Emp.MDiceMultiS, Emp.MDiceMultiW)
-names(mu.empMRS) <- c("Captive","Sanctuary","Wild")
-# Get the number of individuals per group
-group_sizesSET <- table(datMultiRep.sub$Setting)[c("Captive","Sanctuary","Wild")]
-wSET <- group_sizesSET * (group_sizesSET - 1) / 2
-# Compute the weighted sums of squares
-mean.w.empMRS <- weighted.mean(mu.empMRS, wSET=wSET, na.rm=TRUE)
-SS.empMRS <- sum(wSET * (mu.empMRS - mean.w.empMRS)^2, na.rm=TRUE) 
-
-
-# step 5b: matrix permutation test ---
-nPerm <- 1000
-dat.Perm.MultiSET2 <- c()
-perm.pairwiseMRS <- matrix(NA_real_, nrow = nPerm, ncol = 3)
-for(k in 1:nPerm) {
-  ## permute group in datMultiRep
-  ind.Setting.perm.Multi <- datMultiRep.sub
-  ind.Setting.perm.Multi$Setting <- sample(ind.Setting.perm.Multi$Setting, nrow(ind.Setting.perm.Multi), replace=FALSE)
-  datMultiRep.inc.perm.MultiSET <- datMultiRep[,-which(colnames(datMultiRep)=="Setting")] 
-  datMultiRep.inc.perm.MultiSET <- merge(datMultiRep.inc.perm.MultiSET, ind.Setting.perm.Multi, by.x="Subject", by.y="Subject", sort=FALSE)
-  ## repeat step 2 & 3
-  ## create data frame with animal_id as rows and columns (step2)
-  SETdat.wth.btw.Multi2 <- data.frame(matrix(rep(NA, nrow(IndMultiRepSize) * nrow(IndMultiRepSize)), ncol=nrow(IndMultiRepSize)))
-  colnames(SETdat.wth.btw.Multi2) <- IndMultiRepSize$Subject
-  rownames(SETdat.wth.btw.Multi2) <- IndMultiRepSize$Subject
-  ## loop over all pairs of individuals (step2)
-  for(i in 1:(nrow(IndMultiRepSize))) {
-    for(j in 1:(nrow(IndMultiRepSize))) {
-      Ind1 <- subset(datMultiRep.inc.perm.MultiSET, Subject==IndMultiRepSize$Subject[i])
-      Ind2 <- subset(datMultiRep.inc.perm.MultiSET, Subject==IndMultiRepSize$Subject[j])
-      if(length(table(Ind1$Setting))>1) { print("Ohoh, better check my data again!") }
-      if(length(table(Ind2$Setting))>1) { print("Ohoh, better check my data again!") }
-      if(Ind1$Setting[1]=="Captive" & Ind2$Setting[1]=="Captive") { SETwth.btw.Multi2 <- "Captive" }
-      if(Ind1$Setting[1]=="Sanctuary" & Ind2$Setting[1]=="Sanctuary") { SETwth.btw.Multi2 <- "Sanctuary" }
-      if(Ind1$Setting[1]=="Wild" & Ind2$Setting[1]=="Wild") { SETwth.btw.Multi2 <- "Wild" }
-      SETdat.wth.btw.Multi2[which(rownames(SETdat.wth.btw.Multi2)==IndMultiRepSize$Subject[i]),which(colnames(SETdat.wth.btw.Multi2)==IndMultiRepSize$Subject[j])] <- SETwth.btw.Multi2
-    }
-  }
-  ## set diagonal to NA (step6)
-  SETwth.btw.Multi2 <- as.matrix(SETdat.wth.btw.Multi2)
-  diag(SETwth.btw.Multi2) <- NA
-  DiceMulti.C <- ifelse(SETwth.btw.Multi2=="Captive",DiceMulti,NA)
-  DiceMulti.S <- ifelse(SETwth.btw.Multi2=="Sanctuary",DiceMulti,NA)
-  DiceMulti.W <- ifelse(SETwth.btw.Multi2=="Wild",DiceMulti,NA)
-  MDiceMultiC <- mean(DiceMulti.C[lower.tri(DiceMulti.C, diag = FALSE)],na.rm=TRUE)
-  MDiceMultiS <- mean(DiceMulti.S[lower.tri(DiceMulti.S, diag = FALSE)],na.rm=TRUE)
-  MDiceMultiW <- mean(DiceMulti.W[lower.tri(DiceMulti.W, diag = FALSE)],na.rm=TRUE)
-  # omnibus statistic
-  muMRS <- c(MDiceMultiC, MDiceMultiS, MDiceMultiW)
-  mean.wMRS <- weighted.mean(muMRS, wSET=wSET, na.rm=TRUE)
-  dat.Perm.MultiSET2[k] <- sum(wSET * (muMRS - mean.wMRS)^2, na.rm=TRUE)
-  # pairwise differences
-  perm.pairwiseMRS[k, ] <- c(
-    MDiceMultiC - MDiceMultiS,
-    MDiceMultiC - MDiceMultiW,
-    MDiceMultiS - MDiceMultiW
-  )
-  flush.console()
-  if(k %% 10 == 0) { print(paste0("Finished ", k, " out of ", nPerm, " simulations")) } 
-}
-hist(dat.Perm.MultiSET2)
-abline(v=SS.empMRS, col="red") 
-
-p.valueMRS <- (sum(dat.Perm.MultiSET2 >= SS.empMRS) + 1) / (length(dat.Perm.MultiSET2) + 1) #P-value = 0.000999001
-
-#only if the variance differs:
-pairwiseMRS.emp <- c(
-  Emp.MDiceMultiC - Emp.MDiceMultiS,
-  Emp.MDiceMultiC - Emp.MDiceMultiW,
-  Emp.MDiceMultiS - Emp.MDiceMultiW
+# Recompute after filtering individuals
+nb.signals.per.ind <- data.frame(
+  datMultiRep %>%
+    group_by(Subject) %>%
+    dplyr::summarize(count = n(), .groups = "drop")
 )
+colnames(nb.signals.per.ind) <- c("Subject", "NsignalsTot")
+nb.signals.per.ind$Subject <- as.character(nb.signals.per.ind$Subject)
 
-pvalsMRS <- sapply(1:3, function(i) {
-  valid <- !is.na(perm.pairwiseMRS[, i])
-  (sum(abs(perm.pairwiseMRS[valid, i]) >= abs(pairwiseMRS.emp[i])) + 1) /
-    (sum(valid) + 1)
+datMultiRep$Behavior <- datMultiRep$SignalCombination
+Data <- datMultiRep
+
+# ---------------------------------------------------------------------------------------------
+
+# Individual repertoire similarity for settings (Captive-Captive/Sanctuary-Sanctuary, Captive-Sanctuary): 
+library(future.apply)
+
+# Use NULL for full data, or e.g. 50 for rarefaction to 50 signals per individual
+NperInd <- 10 #min(nb.signals.per.ind$NsignalsTot)
+Data$Subject <- as.character(Data$Subject)
+Data$Behavior <- as.character(Data$Behavior)
+Data$Setting <- as.character(Data$Setting)
+
+plan(multisession, workers = 10)
+
+nSubsample <- 100
+nPerm <- 1000
+
+# ------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------
+resultsMR_S_WB <- future_lapply(X=1:nSubsample, future.seed=TRUE, FUN=function(s) {
+
+  if(is.null(NperInd)) { Data.subsampled <- Data } else {
+    valid_inds <- nb.signals.per.ind$Subject[nb.signals.per.ind$NsignalsTot >= NperInd]
+    
+    Data.tmp <- subset(Data, Subject %in% valid_inds)
+    
+    Data.subsampled <- Data.tmp %>%
+      group_by(Subject, .drop = TRUE) %>%
+      slice_sample(n = NperInd, replace = FALSE) %>%
+      ungroup()
+  }
+  
+  dat.ind.bhv2 <- data.frame(
+    Data.subsampled %>%
+      group_by(Subject, Behavior) %>%
+      dplyr::summarize(count = n(), .groups = "drop")
+  )
+  colnames(dat.ind.bhv2) <- c("Subject","Behavior","NsignalsPbehavior")
+  
+  IndRepSize <- aggregate(data=Data.subsampled, Behavior ~ Subject, function(x) length(unique(x)))
+  colnames(IndRepSize) <- c("Subject","RepertoireSize") 
+
+  # Individual repertoire similarity among settings: 
+  subjects <- as.character(IndRepSize$Subject)
+  
+  bhv.list <- split(dat.ind.bhv2$Behavior, dat.ind.bhv2$Subject, drop=TRUE)
+  bhv.list <- bhv.list[subjects]
+  nsub <- length(subjects)
+  
+  setting.vec <- Data.subsampled %>%
+    distinct(Subject, Setting) %>%
+    tibble::deframe()
+  
+  setting.labels <- setting.vec[subjects]
+  
+  stopifnot(all(names(bhv.list) == subjects))
+  stopifnot(all(names(setting.labels) == subjects))
+  
+  # step 1 : calculate Dice coefficient based on formula: dc = (2 x number of behaviours two inds have in common)/(R of ind1 + R ind2) ---
+  Dice <- matrix(NA, nsub, nsub, dimnames=list(subjects, subjects))
+  
+  for(i in 1:nsub){
+    Ind1 <- unique(bhv.list[[i]])
+    RInd1 <- length(Ind1)
+    for(j in i:nsub){
+      Ind2 <- unique(bhv.list[[j]])
+      RInd2 <- length(Ind2)
+      ovrlp <- length(intersect(Ind1, Ind2))
+      Dice[i,j] <- (2 * ovrlp) / (RInd1 + RInd2)
+      Dice[j,i] <- Dice[i,j]
+    }
+  }
+  diag(Dice) <- NA
+  lower_idx <- lower.tri(Dice)
+  
+  # step 2: define within- and between-setting dyads ---
+  wth.btw <- outer(
+    setting.labels,
+    setting.labels,
+    FUN = function(x,y) { ifelse(x==y, "Within", "Between") }
+  )
+  diag(wth.btw) <- NA
+  
+  # Extract upper triangle only (unique dyads)
+  upper_idx <- upper.tri(Dice, diag = FALSE)
+  # Build dyad-level table
+  WBdd <- data.frame(
+    Ind1 = rownames(Dice)[row(Dice)[upper_idx]],
+    Ind2 = colnames(Dice)[col(Dice)[upper_idx]],
+    Dice = Dice[upper_idx],
+    WithinBetween = wth.btw[upper_idx],
+    stringsAsFactors = FALSE
+  )
+  # Remove NA values if needed
+  WBdd <- WBdd[!is.na(WBdd$Dice), ]
+  
+  id_info <- Data.subsampled %>%
+    distinct(Subject, Setting)
+  
+  WBdd <- WBdd %>%
+    left_join(id_info, by = c("Ind1" = "Subject")) %>%
+    rename(Setting.ind1 = Setting) %>%
+    left_join(id_info, by = c("Ind2" = "Subject")) %>%
+    rename(Setting.ind2 = Setting)
+  
+  # step 3: get within and between setting Dice coefficients ---
+  Emp.MDiceWithin <- mean(Dice[lower_idx & wth.btw == "Within"], na.rm=TRUE)
+  Emp.MDiceBetween <- mean(Dice[lower_idx & wth.btw == "Between"], na.rm=TRUE)
+  EF.obs <- Emp.MDiceWithin - Emp.MDiceBetween
+  
+  # step 4: matrix permutation test ---
+  dat.Perm <- numeric(nPerm)
+  
+  for(k in 1:nPerm) {
+    perm.labels <- sample(setting.labels, replace=FALSE)
+    perm.wth.btw <- outer(
+      perm.labels,
+      perm.labels,
+      FUN = function(x,y) ifelse(x==y, "Within", "Between")
+    )
+    diag(perm.wth.btw) <- NA
+    
+    MDiceWithin <- mean(Dice[lower_idx & perm.wth.btw=="Within"], na.rm=TRUE)
+    MDiceBetween <- mean(Dice[lower_idx & perm.wth.btw=="Between"], na.rm=TRUE)
+    
+    dat.Perm[k] <- MDiceWithin - MDiceBetween
+  }
+
+  list(
+    EF = EF.obs,
+    pSRG = (sum(abs(dat.Perm) >= abs(EF.obs)) + 1) / (nPerm + 1),
+    MW = Emp.MDiceWithin,
+    MB = Emp.MDiceBetween,
+    Dyads = WBdd
+  )
 })
 
-pvalsMRS.holm <- p.adjust(pvalsMRS, method = "holm")
+EF_MRS <- sapply(resultsMR_S_WB, `[[`, "EF")
+pSRG <- sapply(resultsMR_S_WB, `[[`, "pSRG")
+MW_MRS <- sapply(resultsMR_S_WB, `[[`, "MW")
+MB_MRS <- sapply(resultsMR_S_WB, `[[`, "MB")
 
-contrast.namesSET <- c(
-  "C-S","C-W","S-W")
-
-resultsMRS <- data.frame(
-  Contrast = contrast.namesSET,
-  p_raw = pvalsMRS,
-  p_holm = pvalsMRS.holm
+all_dyadsMRS <- dplyr::bind_rows(
+  lapply(seq_along(resultsMR_S_WB), function(i) {
+    cbind(Subsample = i, resultsMR_S_WB[[i]]$Dyads)
+  })
 )
+mean_dyadsMRS <- all_dyadsMRS %>%
+  group_by(Ind1, Ind2, Setting.ind1, Setting.ind2, WithinBetween) %>%
+  summarize(
+    MeanDice = mean(Dice, na.rm = TRUE),
+    SDDice = sd(Dice, na.rm = TRUE),
+    Nd = n(),
+    .groups = "drop"
+  )
 
-resultsMRS
-#  Contrast       p_raw      p_holm
-#1      C-S 0.000999001 0.002997003 #
-#2      C-W 0.000999001 0.002997003 #
-#3      S-W 0.018981019 0.018981019 #
+summary(EF_MRS)    			# Effect size
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#0.01044 0.01990 0.02316 0.02281 0.02566 0.03930 
+sd(EF_MRS)					# Standard deviation of effect size across rarefactions
+#0.005072407
+summary(pSRG)    		# P-value
+#    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+#0.000999 0.000999 0.001998 0.005205 0.003247 0.065934 
+mean(pSRG < 0.05)    	# P-value < 0.05
+#0.98
+mean(MW_MRS)   				# Mean Dice within
+#0.06884241
+mean(MB_MRS)   				# Mean Dice between
+#0.04603201
+sd(MW_MRS)
+#0.005650359
+sd(MB_MRS)
+#0.003984207
 
 
-# Boxplot DiceMulti within/between (steps a)
+# ---------------------------------------------------------------------------------------------
+# Repertoire similarity within setting Captive (C-C), within setting Sanctuary (S-S) , within setting Wild (W-W)
+# ---------------------------------------------------------------------------------------------
+settings <- c("Captive", "Sanctuary", "Wild")
+# Use NULL for full data, or e.g. 50 for rarefaction to 50 signals per individual
+# Or use min(nb.signals.per.ind$NsignalsTot) to select the minimum across individuals (i.e. 30)
+NperInd <- 10 #min(nb.signals.per.ind$NsignalsTot)
+Data$Subject <- as.character(Data$Subject)
+Data$Behavior <- as.character(Data$Behavior)
+Data$Setting <- as.character(Data$Setting)
+
+plan(multisession, workers = 10)
+
+nSubsample <- 100
+nPerm <- 1000
+
+# ------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------
+resultsMR_S_W <- future_lapply(X=1:nSubsample, future.seed=TRUE, FUN=function(s) {
+
+  if(is.null(NperInd)) { Data.subsampled <- Data } else {
+    valid_inds <- nb.signals.per.ind$Subject[nb.signals.per.ind$NsignalsTot >= NperInd]
+    
+    Data.tmp <- subset(Data, Subject %in% valid_inds)
+    
+    Data.subsampled <- Data.tmp %>%
+      group_by(Subject, .drop = TRUE) %>%
+      slice_sample(n = NperInd, replace = FALSE) %>%
+      ungroup()
+  }
+  
+  dat.ind.bhv2 <- data.frame(
+    Data.subsampled %>%
+      group_by(Subject, Behavior) %>%
+      dplyr::summarize(count = n(), .groups = "drop")
+  )
+  colnames(dat.ind.bhv2) <- c("Subject","Behavior","NsignalsPbehavior")
+  
+  IndRepSize <- aggregate(data=Data.subsampled, Behavior ~ Subject, function(x) length(unique(x)))
+  colnames(IndRepSize) <- c("Subject","RepertoireSize") 
+
+  # Individual repertoire similarity (A-A/B-B, A-B): 
+  subjects <- as.character(IndRepSize$Subject)
+  
+  bhv.list <- split(dat.ind.bhv2$Behavior, dat.ind.bhv2$Subject, drop=TRUE)
+  bhv.list <- bhv.list[subjects]
+  nsub <- length(subjects)
+  
+  setting.vec <- Data.subsampled %>%
+    distinct(Subject, Setting) %>%
+    tibble::deframe()
+  
+  setting.labels <- setting.vec[subjects]
+  
+  stopifnot(all(names(bhv.list) == subjects))
+  stopifnot(all(names(setting.labels) == subjects))
+  
+  # step 1 : calculate Dice coefficient based on formula: dc = (2 x number of behaviours two inds have in common)/(R of ind1 + R ind2) ---
+  Dice <- matrix(NA, nsub, nsub, dimnames=list(subjects, subjects))
+  
+  for(i in 1:nsub){
+    Ind1 <- unique(bhv.list[[i]])
+    RInd1 <- length(Ind1)
+    for(j in i:nsub){
+      Ind2 <- unique(bhv.list[[j]])
+      RInd2 <- length(Ind2)
+      ovrlp <- length(intersect(Ind1, Ind2))
+      Dice[i,j] <- (2 * ovrlp) / (RInd1 + RInd2)
+      Dice[j,i] <- Dice[i,j]
+    }
+  }
+  diag(Dice) <- NA
+  lower_idx <- lower.tri(Dice)
+
+  # Matrix saying which within-setting dyad each pair belongs to
+  wth.btw2 <- outer(
+    setting.labels,
+    setting.labels,
+    FUN = function(x, y) ifelse(x == y, x, NA_character_))
+  diag(wth.btw2) <- NA_character_
+  
+  # Empirical setting-specific mean Dice values
+  mu.emp <- sapply(settings, function(g) {
+    mean(Dice[lower_idx & wth.btw2 == g], na.rm = TRUE)
+  })
+
+  names(mu.emp) <- settings
+  stopifnot(!any(is.na(mu.emp)))
+  
+  # Weights = number of within-setting dyads per setting
+  setting_sizes <- table(factor(setting.labels, levels = settings))
+  w <- setting_sizes * (setting_sizes - 1) / 2
+  stopifnot(all(settings %in% unique(setting.labels)))
+  stopifnot(all(w > 0))
+  
+  # Weighted omnibus statistic
+  mean.w.emp <- weighted.mean(mu.emp, w = w, na.rm = TRUE)
+  SS.emp <- sum(w * (mu.emp - mean.w.emp)^2, na.rm = TRUE)
+  
+  # Pairwise empirical differences
+  pairwise.emp <- c(
+    mu.emp["Captive"]  - mu.emp["Sanctuary"],
+    mu.emp["Captive"]  - mu.emp["Wild"],
+    mu.emp["Sanctuary"]  - mu.emp["Wild"]
+  )
+  
+  contrast.names <- c("Captive-Sanctuary","Captive-Wild","Sanctuary-Wild")
+  
+  names(pairwise.emp) <- contrast.names
+  
+  # Permutation test
+  dat.Perm2 <- numeric(nPerm)
+  perm.pairwise <- matrix(NA_real_, nrow = nPerm, ncol = length(pairwise.emp))
+  colnames(perm.pairwise) <- contrast.names
+  
+  for(k in 1:nPerm) {
+    
+    perm.labels <- sample(setting.labels, replace = FALSE)
+    
+    perm.wth.btw2 <- outer(
+      perm.labels,
+      perm.labels,
+      FUN = function(x, y) ifelse(x == y, x, NA_character_))
+    diag(perm.wth.btw2) <- NA_character_
+    
+    mu <- sapply(settings, function(g) {
+      mean(Dice[lower_idx & perm.wth.btw2 == g], na.rm = TRUE)
+    })
+    names(mu) <- settings
+    stopifnot(!any(is.na(mu)))
+
+	mean.w <- weighted.mean(mu, w = w, na.rm = TRUE)
+    dat.Perm2[k] <- sum(w * (mu - mean.w)^2, na.rm = TRUE)
+    
+    perm.pairwise[k, ] <- c(
+      mu["Captive"]  - mu["Sanctuary"],
+      mu["Captive"]  - mu["Wild"],
+      mu["Sanctuary"]  - mu["Wild"]
+    )
+  }
+  
+  p.omnibus <- (sum(dat.Perm2 >= SS.emp) + 1) / (nPerm + 1)
+  
+  p.pairwise <- sapply(seq_along(pairwise.emp), function(i) {
+    valid <- !is.na(perm.pairwise[, i])
+    (sum(abs(perm.pairwise[valid, i]) >= abs(pairwise.emp[i])) + 1) /
+      (sum(valid) + 1)
+  })
+  names(p.pairwise) <- contrast.names
+  
+  p.pairwise.holm <- p.adjust(p.pairwise, method = "holm")
+  names(p.pairwise.holm) <- contrast.names
+  
+  list(
+    SS = SS.emp,
+    p.omnibus = p.omnibus,
+    mu.emp = mu.emp,
+    pairwise.emp = pairwise.emp,
+    p.pairwise = p.pairwise,
+    p.pairwise.holm = p.pairwise.holm
+  )
+})
+
+SS_MRS <- sapply(resultsMR_S_W, `[[`, "SS")
+p.omnibus_MRS <- sapply(resultsMR_S_W, `[[`, "p.omnibus")
+mu.emp_MRS <- sapply(resultsMR_S_W, `[[`, "mu.emp")
+pairwise.emp_MRS <- sapply(resultsMR_S_W, `[[`, "pairwise.emp")
+p.pairwise_MRS <- sapply(resultsMR_S_W, `[[`, "p.pairwise")
+p.pairwise.holm_MRS <- sapply(resultsMR_S_W, `[[`, "p.pairwise.holm")
+
+summary(SS_MRS)    						# How stable are the omnibus effect size is across subsampling?
+#   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+#0.01249 0.07204 0.12171 0.13677 0.18450 0.36936 
+sd(SS_MRS)								# Standard deviation of the Sum of Squares
+#0.0810288
+summary(p.omnibus_MRS)    				# omnibus P-values
+#    Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
+#0.001998 0.018482 0.064935 0.110100 0.142358 0.717283 
+mean(p.omnibus_MRS < 0.05)  			# Does the omnibus significance remain robust across subsampling?
+#0.4
+rowMeans(mu.emp_MRS)    				# Average repertoire similarity and its variability per group
+#   Captive  Sanctuary       Wild 
+#0.04783971 0.08484805 0.05994106 
+apply(mu.emp_MRS, 1, sd)
+#    Captive   Sanctuary        Wild 
+#0.005294550 0.009663182 0.016065026 
+rowMeans(pairwise.emp_MRS)
+#Captive-Sanctuary      Captive-Wild    Sanctuary-Wild 
+#      -0.03700834       -0.01210135        0.02490699 
+apply(pairwise.emp_MRS, 1, sd)
+#Captive-Sanctuary      Captive-Wild    Sanctuary-Wild 
+#       0.01173195        0.01598527        0.01859009 
+rowMeans(p.pairwise_MRS)
+#Captive-Sanctuary      Captive-Wild    Sanctuary-Wild 
+#       0.08148851        0.67732268        0.49346653 
+rowMeans(p.pairwise_MRS < 0.05)			# In what fraction of rarefaction replicates was this contrast significant?
+#Captive-Sanctuary      Captive-Wild    Sanctuary-Wild 
+#             0.53              0.00              0.01 
+rowMeans(p.pairwise.holm_MRS < 0.05)	# Which contrasts remain significant after multiple-testing correction consistently across rarefactions?
+#Captive-Sanctuary      Captive-Wild    Sanctuary-Wild 
+#             0.28              0.00              0.00 
+
+
+# ---------------------------------------------------------------------------------------------
+# Boxplot MeanDice within/between (steps a) --------------------------------------------------
+# ---------------------------------------------------------------------------------------------
 
 library(ggplot2)
 theme_angele_ss <- theme(panel.background = element_blank(),
@@ -436,30 +515,65 @@ theme_angele_ss <- theme(panel.background = element_blank(),
                          title = element_text(size = 20, family="sans"),
                          strip.text = element_text(size = 15))
 
-levels(WBddMultiSET$Setting.ind1) <- c("Captive", "Sanctuary", "Wild") # DiceMulti = dd ?
+levels(mean_dyadsMRS$Setting.ind1) <- c("Captive", "Sanctuary", "Wild") # MeanDice = dd ?
 
-WBddMultiSETWithin <- subset(WBddMultiSET, WBddMultiSET$WithinBetween=="WithinS")
+WBddMultiSETWithin <- subset(mean_dyadsMRS, mean_dyadsMRS$WithinBetween=="Within")
 
-F2 <- ggplot() + 
-  geom_boxplot(WBddMultiSETWithin, mapping=aes(x = Setting.ind1, y = DiceMulti), width = 0.9, fill = c("#068591", "#ba8211", "#ba0f09")) +
-  geom_boxplot(WBddMultiSET, mapping=aes(x = WithinBetween, y = DiceMulti), width = 0.9, fill = c("grey90","grey90")) +
-  geom_point(WBddMultiSETWithin, mapping=aes(x = Setting.ind1, y = DiceMulti), position= dodge.posn, shape = 1, colour = "black", alpha = 0.5) +
-  geom_point(WBddMultiSET, mapping=aes(x = WithinBetween, y = DiceMulti), position= dodge.posn, shape = 1, colour = "black", alpha = 0.5) +
+F4 <- ggplot() + 
+  geom_boxplot(WBddMultiSETWithin, mapping=aes(x = Setting.ind1, y = MeanDice), width = 0.9, fill = c("#068591", "#ba8211", "#ba0f09")) +
+  geom_boxplot(mean_dyadsMRS, mapping=aes(x = WithinBetween, y = MeanDice), width = 0.9, fill = c("grey90","grey90")) +
+  geom_point(WBddMultiSETWithin, mapping=aes(x = Setting.ind1, y = MeanDice), position= dodge.posn, shape = 1, colour = "black", alpha = 0.5) +
+  geom_point(mean_dyadsMRS, mapping=aes(x = WithinBetween, y = MeanDice), position= dodge.posn, shape = 1, colour = "black", alpha = 0.5) +
   geom_vline(xintercept = 3.5, linetype = "dashed", color = "grey40") + 
   theme_angele_ss +
   ggtitle("(b)") +
   scale_y_continuous("Repertoire similarity among individuals") +
   scale_x_discrete(" ",
-                   limits = c("Captive", "Sanctuary", "Wild", "BetweenS", "WithinS"),
+                   limits = c("Captive", "Sanctuary", "Wild", "Between", "Within"),
                    labels = c("Within \nCaptive", "Within \nSanctuary", "Within \nWild", "Between \nsettings", "Within \nsettings"))+
-  #facet_wrap(~DiceMulti, scales='free_x')+
-  stat_summary(WBddMultiSETWithin, mapping=aes(x = Setting.ind1, y = DiceMulti), fun=mean, geom="point",shape =23, fill ="black",position=position_dodge(.9), 
+  #facet_wrap(~MeanDice, scales='free_x')+
+  stat_summary(WBddMultiSETWithin, mapping=aes(x = Setting.ind1, y = MeanDice), fun=mean, geom="point",shape =23, fill ="black",position=position_dodge(.9), 
                color="black", size=3) +
-  stat_summary(WBddMultiSET, mapping=aes(x = WithinBetween, y = DiceMulti), fun=mean, geom="point",shape =23, fill ="black",position=position_dodge(.9), 
+  stat_summary(mean_dyadsMRS, mapping=aes(x = WithinBetween, y = MeanDice), fun=mean, geom="point",shape =23, fill ="black",position=position_dodge(.9), 
                color="black", size=3) +
   theme(legend.position = "none", axis.title.y = element_blank(), axis.text.y = element_blank(), axis.ticks.y = element_blank())
 
-print(F2)
+print(F4)
 
-ggarrange(F1, F2, widths = c(1.7,1))
+ggarrange(F3, F4, widths = c(1.5,1))
 
+# Setting VS Group comparison
+MDice_group_set <- data.frame(
+  value = c(MW_MRG, MW_MRS),
+  group = rep(c("MW_MRG", "MW_MRS"),
+              c(length(MW_MRG), length(MW_MRS)))
+)
+MEffects_group_set <- data.frame(
+  value = c(EF_MRG, EF_MRS),
+  group = rep(c("EF_MRG", "EF_MRS"),
+              c(length(EF_MRG), length(EF_MRS)))
+)
+
+MDGS <- ggplot(MDice_group_set, aes(x = value, fill = group)) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 20) +
+  theme_angele_ss+
+  scale_x_continuous("Dice coefficients", breaks = seq(0.05, 0.10, by=0.01), limits = c(0.05, 0.10)) + 
+  scale_y_continuous("N", breaks = seq(0, 30, by=5), limits = c(0, 30)) + 
+  scale_fill_manual(labels = c("Groups", "Settings"), values = c("#007ABB", "#ba0f09")) +
+  labs(fill = "Dice within:") +
+  theme(legend.position = "bottom", legend.text = element_text(size = 12, vjust = 8), legend.title = element_text(size = 12, vjust = 0.6)) +
+  ggtitle("(c)") 
+
+MEFGS <- ggplot(MEffects_group_set, aes(x = value, fill = group)) +
+  geom_histogram(alpha = 0.5, position = "identity", bins = 20) +
+  theme_angele_ss+
+  scale_x_continuous("Effect values", breaks = seq(0.01, 0.06, by=0.01), limits = c(0.01, 0.06)) + 
+  scale_y_continuous(" ", breaks = seq(0, 30, by=5), limits = c(0, 30)) + 
+  scale_fill_manual(labels = c("Group", "Setting"), values = c("#007ABB", "#ba0f09")) +
+  labs(fill = "Effect sizes for:") +
+  theme(legend.position = "bottom", legend.text = element_text(size = 12, vjust = 8), legend.title = element_text(size = 12, vjust = 0.6)) +
+  ggtitle("(d)") 
+
+DiceMR <- ggarrange(MDGS, MEFGS)
+DiceMR
+ggarrange(DiceSR, DiceMR, ncol = 1)
