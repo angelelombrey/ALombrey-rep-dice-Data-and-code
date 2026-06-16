@@ -154,7 +154,7 @@ ggplot(MultiRepComp, aes(x = reorder(Subject, MultiRepSize), y = MultiRepSize)) 
   scale_y_continuous("Multimodal Repertoire size", breaks = seq(0, 40, by=5), limits = c(0, 40)) + 
   scale_fill_manual(values = c("#007ABB", "#00AFBB","#259C39", "#E7B800","#E79A00", "#ba0f09")) + 
   scale_color_manual(values = c("white", "black")) +
-  theme(axis.text.x = element_blank())  # OR axis.text.x = element_blank()
+  theme(legend.text = element_text(vjust = 2), axis.text.x = element_blank())  # OR axis.text.x = element_blank()
 
 
 ##MODEL
