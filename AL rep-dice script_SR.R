@@ -275,19 +275,20 @@ ggplot(Kanyawara2.out, aes(Date, Behavior)) +
 # Put them all on the same graph
 LeipzigA2.out$Group <- "A" ; LeipzigA2.out<-LeipzigA2.out[,c("Behavior","Date","Group")] ; LeipzigA2.out$Date <- c(1:39)
 LeipzigB2.out$Group <- "B" ; LeipzigB2.out<-LeipzigB2.out[,c("Behavior","Date","Group")] ; LeipzigB2.out$Date <- c(1:31)
-C2_2.out$Group <- "C2" ; C2_2.out$Date <- c(1:49)
+C2_2.out$Group <- "C2" ; C2_2.out$Date <- c(1:48)
 C4_2.out$Group <- "C4" ; C4_2.out$Date <- c(1:24)
 Leintalzoo2.out$Group <- "L" ; Leintalzoo2.out$Date <- c(1:43)
 Kanyawara2.out$Group <- "K" ; Kanyawara2.out$Date <- c(1:150)
 CumulativeRepertoire <- rbind(LeipzigA2.out, LeipzigB2.out, C2_2.out, C4_2.out, Leintalzoo2.out, Kanyawara2.out)
 CumulativeRepertoire$Group <- factor(CumulativeRepertoire$Group,levels = c("A", "B", "L", "C2", "C4", "K"))
 ggplot(CumulativeRepertoire, aes(x=Date, y=Behavior, group=Group, color=Group)) + 
-  geom_line(linewidth=1.5) +
+  geom_line(linewidth=1) +
   geom_point(aes(color=Group),size=2) + 
   theme_angele_ss + 
   scale_color_manual(values = c("#007ABB","#00AFBB", "#259C39", "#E7B800","#E79A00", "#ba0f09")) + 
   scale_y_continuous("Cummulative number of observed signals", breaks = seq(0, 80, by=10)) + 
-  scale_x_continuous("Observation time (days)", breaks = seq(0, 150, by=10))
+  scale_x_continuous("Observation time (days)", breaks = seq(0, 150, by=10)) +
+  theme(legend.text = element_text(vjust = 2.25)) 
 
 _____________________________________________________________________________________________________________________
 2. Repertoire size 
@@ -299,6 +300,27 @@ GroupRepSize <- aggregate(data=Data, Behavior ~ Group, function(x) length(unique
 
 
 ##Graph
+theme_angele_ss2 <- theme(panel.background = element_blank(),
+                         panel.border =element_rect(colour="black", fill=NA),
+                         plot.background = element_blank(),
+                         panel.grid = element_blank(),
+                         axis.line = element_line(colour ="black"),
+                         axis.text.x = element_text (size = 25,colour= "black", family="sans"),
+                         axis.text.y = element_text (size = 25,colour= "black", family="sans"),
+                         axis.ticks.y = element_line(colour="black"),
+                         axis.ticks.x = element_line(colour="black"),
+                         axis.title.x = element_text(size = 25, vjust = -0.5, family="sans"),
+                         axis.title.y = element_text(size = 25, vjust = 2, family="sans"),
+                         legend.text=  element_text(size = 25, family="sans", margin = margin(t = 10)),
+                         legend.title = element_text(size = 25, vjust = 2, family="sans"),
+                         legend.key = element_blank(),
+                         legend.position = "right",
+                         legend.spacing.x = unit(0.2, 'cm'),
+                         title = element_text(size = 20, family="sans"),
+                         strip.text = element_text(size = 25),
+                         margin(t = 1, r = 1, b = 2, l = 1)
+)
+
 IDinfo <- Data[,c("Subject","Group","Setting","Sex","Age","Rank", "GroupSize","NbAdultMales","NbJuveniles","NbInteractionPartners","TotComActs","ASOSize")] # extraire les colonnes du tableau d'origine
 IDinfo <- IDinfo %>%
   group_by(across(-Age)) %>%
@@ -312,12 +334,12 @@ RepComp$Group <- factor(RepComp$Group,levels = c("A", "B", "L", "C2", "C4", "K")
 library(tidytext)
 ggplot(RepComp, aes(x = reorder(Subject, RepertoireSize), y = RepertoireSize)) + 
   geom_col(linewidth = 1.5, aes(fill = Group, color = Sex)) + 
-  theme_angele_ss + 
+  theme_angele_ss2 + 
   scale_x_discrete("Subject") +
   scale_y_continuous("Repertoire size", breaks = seq(0, 30, by = 5)) + 
   scale_fill_manual(values = c("#007ABB", "#00AFBB","#259C39", "#E7B800","#E79A00", "#ba0f09")) + 
   scale_color_manual(values = c("white", "black")) +
-  theme(legend.text = element_text(vjust = 2.75), axis.text.x = element_blank())  # OR axis.text.x = element_blank()
+  theme(legend.text = element_text(vjust = 2), axis.text.x = element_blank())  # OR axis.text.x = element_blank()
 
 RepComp <- RepComp |> arrange(Group, RepertoireSize) |> mutate(Subject_ord = factor(Subject, levels = Subject))
 ggplot(RepComp, aes(x = Subject_ord, y = RepertoireSize)) +
